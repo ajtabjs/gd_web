@@ -1,0 +1,687 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Geometry Dash WASM</title><style>html{background:#000;}body{margin:0;height:100%;color:#ddd;font-family:monospace;overflow:hidden;}#bg{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}#bg::before{content:"";position:absolute;top:-4%;left:0;width:200%;height:108%;background:url("ref/fondo_gd.jpg") repeat-x;background-size:50% 100%;filter:blur(12px);animation:bgdrift 90s linear infinite;}@keyframes bgdrift{from{transform:translateX(0);}to{transform:translateX(-50%);}}@media (prefers-reduced-motion:reduce){#bg::before{animation:none;}}#app{display:flex;flex-direction:column;height:100vh;}#logoDock{flex:0 0 auto;display:flex;justify-content:center;padding:6px 0 2px;opacity:0;transition:opacity .45s linear;}#logoDock.in{opacity:1;}#logoDock img{max-height:64px;max-width:40vw;width:auto;height:auto;}#stage{flex:1 1 auto;min-height:0;display:flex;justify-content:center;align-items:center;transform:translateY(-170%);transition:transform .55s cubic-bezier(.2,.85,.25,1);}#stage.in{transform:translateY(0);}canvas{max-width:96vw;max-height:100%;width:auto;height:auto;background:#000;image-rendering:pixelated;outline:none;display:block;user-select:none;}#midbar{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 0 6px;font-size:12px;color:#aaa;opacity:0;transform:translateY(120%);transition:transform .55s cubic-bezier(.2,.85,.25,1),opacity .45s;}#midbar.in{opacity:1;transform:translateY(0);}#bars{display:flex;flex-direction:column;gap:5px;transition:transform .5s cubic-bezier(.2,.85,.25,1),opacity .45s;}#bars.fall{transform:translateY(30px);opacity:0;pointer-events:none;}.abrow{display:flex;align-items:center;gap:7px;}.ablabel{width:100px;text-align:right;color:#888;font-size:10px;letter-spacing:.5px;white-space:nowrap;}.abtrack{position:relative;width:220px;height:8px;background:#111;border:1px solid #333;border-radius:4px;overflow:hidden;}.abfill{width:0%;height:100%;background:#ccc;border-radius:3px;transition:width .15s;}.abpct{width:38px;text-align:left;color:#999;font-size:11px;}#bootbars{display:none;align-items:center;gap:7px;}#bootbars.on{display:flex;animation:bootdrop .5s cubic-bezier(.2,.85,.25,1);}@keyframes bootdrop{from{transform:translateY(-16px);opacity:0;}to{transform:translateY(0);opacity:1;}}#fps{display:flex;align-items:center;gap:5px;color:#999;will-change:transform;}#fps svg{display:block;flex:0 0 auto;}#console{flex:0 0 auto;height:18vh;min-height:90px;max-height:200px;margin:0 8px 8px;padding:6px 8px;overflow-y:auto;font-size:12px;line-height:1.35;color:#999;background:#0a0a0a;border:1px solid #2a2a2a;white-space:pre-wrap;word-break:break-word;user-select:text;cursor:text;transform:translateY(135%);transition:transform .55s cubic-bezier(.2,.85,.25,1);}#console.in{transform:translateY(0);}#start{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:transparent;transition:opacity .5s;}#start.hide{opacity:0;pointer-events:none;}#logoFly{margin-top:14vh;transition:transform .45s cubic-bezier(.2,.9,.25,1);}#logoFly img{max-height:200px;max-width:70vw;width:auto;height:auto;}#logoFly.up{transform:translateY(-13vh) scale(.32);}#loadFly{margin-bottom:30vh;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;transition:transform 1.15s cubic-bezier(.45,0,.6,1),opacity 1.15s linear;}#loadFly img{max-height:150px;max-width:40vw;width:auto;height:auto;display:block;transition:transform .15s;}#loadFly img:hover{transform:scale(1.08);}#loadFly.down{transform:translateY(32vh) scale(.8);opacity:0;}#fsBtn{font:12px/1 monospace;color:#ccc;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:4px;padding:4px 8px;cursor:pointer;transition:color .2s;}#fsBtn:hover{color:#fff;}#canvas:fullscreen{max-width:none;max-height:none;width:100%;height:100%;}#canvas:-webkit-full-screen{max-width:none;max-height:none;width:100%;height:100%;}</style></head><body><div id="bg"></div><div id="app"><div id="logoDock"><img src="ref/logo.png" alt="logo"></div><div id="stage"><canvas id="canvas" width="1920" height="1080"></canvas></div><div id="midbar"><div id="bars"><div class="abrow"><span class="ablabel">WASM</span><div class="abtrack"><div class="abfill" id="wasmFill"></div></div><span class="abpct" id="wasmPct">0%</span></div><div class="abrow"><span class="ablabel">DATA</span><div class="abtrack"><div class="abfill" id="dataFill"></div></div><span class="abpct" id="dataPct">0%</span></div></div><div id="bootbars"><div class="abtrack"><div class="abfill" id="bootFill"></div></div><span class="abpct" id="bootPct">0%</span></div><div id="fps"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.2" y="2" width="13.6" height="9" rx="1.6" fill="none" stroke="#888" stroke-width="1.4"/><rect x="6.5" y="12" width="3" height="2" fill="#888"/><rect x="4.5" y="14.2" width="7" height="1.3" rx="0.6" fill="#888"/></svg><span id="fpsval">-- fps</span></div><button id="fsBtn" type="button">Fullscreen</button></div><div id="console"></div></div><div id="start"><div id="logoFly"><img src="ref/logo.png" alt="logo"></div><div id="loadFly"><img src="ref/load.png" alt="load"></div></div><script>var consoleEl = document.getElementById('console');
+try { Error.stackTraceLimit = 400; } catch (e) {}
+var logQueue = [], logScheduled = false;
+window.gdLogRaw = [];
+var GD_LOG_DOM_MAX = 4000;
+window.gdLogDump = function () { return window.gdLogRaw.join('\n'); };
+function flushLog() {
+logScheduled = false;
+if (!logQueue.length) return;
+var frag = document.createDocumentFragment();
+for (var i = 0; i < logQueue.length; i++) {
+var line = document.createElement('div');
+line.textContent = logQueue[i];
+frag.appendChild(line);
+}
+logQueue = [];
+var nearBottom =
+consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 40;
+consoleEl.appendChild(frag);
+while (consoleEl.childNodes.length > GD_LOG_DOM_MAX)
+consoleEl.removeChild(consoleEl.firstChild);
+if (nearBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+var seenDep = Object.create(null);
+var QUIET = ['[perf]', '[frame]', '[webgl]', '[io]', '[tex]', '[pngc]',
+'[pngd]', '[fmtf]', '[sink]', '[htb]', '[disp]', '[rawin]',
+'[touch]', '[cte]', '[list]', '[drs]', '[tex2]'];
+function isQuiet(str) {
+for (var i = 0; i < QUIET.length; ++i) {
+if (str.lastIndexOf(QUIET[i], 0) === 0) return true;
+}
+return false;
+}
+function say(s) {
+var str = String(s);
+if (!isQuiet(str)) console.log(s);
+if (str.indexOf('dependency: ') === 0 ||
+str.indexOf('still waiting on run dependencies') === 0 ||
+str === '(end of list)') {
+if (seenDep[str]) return;
+seenDep[str] = 1;
+}
+window.gdLogRaw.push(str);
+if (window.gdLogRaw.length > 400000)
+window.gdLogRaw.splice(0, 100000);
+logQueue.push(str);
+if (!logScheduled) {
+logScheduled = true;
+requestAnimationFrame(flushLog);
+}
+}
+var gdProg = 0, gdProgDone = false;
+var gdAssetDone = { wasm: false, data: false };
+var gdAssetsFell = false;
+var wasmFill = document.getElementById('wasmFill');
+var dataFill = document.getElementById('dataFill');
+var wasmPct = document.getElementById('wasmPct');
+var dataPct = document.getElementById('dataPct');
+var bootFill = document.getElementById('bootFill');
+var bootPct = document.getElementById('bootPct');
+function setAssetBar(which, loaded, total) {
+var fill = which === 'wasm' ? wasmFill : dataFill;
+var pctEl = which === 'wasm' ? wasmPct : dataPct;
+if (!fill) return;
+var p;
+if (total > 0) {
+p = Math.min(100, loaded / total * 100);
+} else {
+var est;
+if (which === 'wasm') {
+try { est = Number(localStorage.getItem('gdWasmSize')) || 0; }
+catch (e) { est = 0; }
+est = est || 110 * 1024 * 1024;
+} else {
+est = window.__gdDataEst || 320 * 1024 * 1024;
+}
+p = Math.min(95, loaded / est * 95);
+}
+fill.style.width = p.toFixed(1) + '%';
+pctEl.textContent = p.toFixed(0) + '%';
+if (total > 0 && loaded >= total) gdAssetDone[which] = true;
+if (gdAssetDone.wasm && gdAssetDone.data) assetsDone();
+}
+function forceAssetsDone() {
+gdAssetDone.wasm = true;
+gdAssetDone.data = true;
+setAssetBar('wasm', 1, 1);
+setAssetBar('data', 1, 1);
+assetsDone();
+}
+function assetsDone() {
+if (gdAssetsFell) return;
+gdAssetsFell = true;
+var bars = document.getElementById('bars');
+var boot = document.getElementById('bootbars');
+if (bars) bars.classList.add('fall');
+setTimeout(function () {
+if (bars) bars.style.display = 'none';
+if (boot) boot.classList.add('on');
+}, 520);
+}
+function setProgress(p, exact) {
+if (gdProgDone && p < 100) return;
+p = Math.max(0, Math.min(100, p));
+if (p < gdProg && !exact) return;
+gdProg = p;
+if (bootFill) bootFill.style.width = p.toFixed(1) + '%';
+if (bootPct) bootPct.textContent = p.toFixed(0) + '%';
+if (p >= 100) gdProgDone = true;
+}
+function resetProgress() {
+gdProgDone = false;
+gdProg = 0;
+gdAssetsFell = false;
+gdAssetDone = { wasm: false, data: false };
+var bars = document.getElementById('bars');
+var boot = document.getElementById('bootbars');
+if (bars) { bars.style.display = ''; bars.classList.remove('fall'); }
+if (boot) boot.classList.remove('on');
+var wf = document.getElementById('wasmFill');
+var df = document.getElementById('dataFill');
+if (wf) wf.style.width = '0%';
+if (df) df.style.width = '0%';
+var wp = document.getElementById('wasmPct');
+var dp = document.getElementById('dataPct');
+if (wp) wp.textContent = '0%';
+if (dp) dp.textContent = '0%';
+if (bootFill) bootFill.style.width = '0%';
+if (bootPct) bootPct.textContent = '0%';
+}
+window.gdFirstFrame = function () {
+forceAssetsDone();
+setProgress(100);
+};
+var gdSaveTimer = null;
+function scheduleSave() {
+if (!window.__gdRuntimeReady) return;
+if (gdSaveTimer) clearTimeout(gdSaveTimer);
+gdSaveTimer = setTimeout(function () {
+gdSaveTimer = null;
+try { if (Module._gd_request_save) Module._gd_request_save(); } catch (e) {}
+}, 2500);
+}
+window.addEventListener('mousedown', scheduleSave);
+window.addEventListener('keydown', scheduleSave);
+setInterval(function () {
+if (!window.__gdLoadStarted || gdProgDone) return;
+if (!gdAssetsFell) {
+var df = Module.dataFileDownloads;
+if (df) {
+for (var k in df) {
+var e = df[k];
+var which = /wasm/i.test(k) ? 'wasm'
+: (/\.data/i.test(k) ? 'data' : null);
+if (which) setAssetBar(which, e.loaded || 0, e.total || 0);
+}
+}
+} else if (gdProg < 78) {
+setProgress(gdProg + 0.35);
+}
+}, 200);
+(function () {
+var fpsEl = document.getElementById('fpsval');
+var lastT = performance.now(), lastN = 0, primed = false;
+function tick(now) {
+if (now - lastT >= 500) {
+if (!window.__gdRuntimeReady) {
+lastT = now;
+requestAnimationFrame(tick);
+return;
+}
+var n = 0;
+try {
+if (Module._gd_frames_get) n = Module._gd_frames_get() | 0;
+} catch (e) {}
+if (n > 0) {
+if (primed)
+fpsEl.textContent =
+Math.round((n - lastN) * 1000 / (now - lastT)) + ' fps';
+lastN = n;
+primed = true;
+if (!window.__gdGotFrame) {
+window.__gdGotFrame = true;
+setProgress(100);
+}
+} else if (!primed) {
+fpsEl.textContent = '-- fps';
+}
+lastT = now;
+}
+requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+})();
+function dumpTrace() {
+if (!window.__gdRuntimeReady) { say('runtime not initialized; no trace'); return; }
+try {
+if (!Module._gd_trace_count) { say('no trace exports'); return; }
+var n = Module._gd_trace_count();
+var m = Math.min(48, n);
+var out = [];
+for (var i = 0; i < m; ++i) {
+var va = Module._gd_trace_at(i);
+if (typeof va === 'bigint') va = Number(va & 0xffffffffn);
+else va = va >>> 0;
+out.push('0x' + va.toString(16));
+}
+say('TRACE total=' + n + ' newest-first: ' + out.join(' '));
+} catch (e) { say('trace dump failed: ' + e); }
+}
+window.addEventListener('error', e => { say('ERROR: ' + e.message); dumpTrace(); });
+window.addEventListener('unhandledrejection', e => { say('REJECT: ' + e.reason); dumpTrace(); });
+function restoreSaves(then) {
+var called = false;
+function finish() { if (!called) { called = true; then(); } }
+setTimeout(finish, 3000);
+try {
+var req = indexedDB.open('gdwasm_saves', 1);
+req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
+req.onerror = function () { say('[persist] idb open failed'); finish(); };
+req.onsuccess = function () {
+var store, keysReq;
+try {
+store = req.result.transaction('files', 'readonly').objectStore('files');
+keysReq = store.getAllKeys();
+} catch (e) { finish(); return; }
+keysReq.onerror = finish;
+keysReq.onsuccess = function () {
+var keys = keysReq.result || [];
+say('[persist] restore: ' + keys.length + ' file(s) in DB' +
+(keys.length ? ': ' + keys.join(', ') : ''));
+if (!keys.length) { finish(); return; }
+var pending = keys.length;
+function one() { if (--pending === 0) finish(); }
+keys.forEach(function (k) {
+var g = store.get(k);
+g.onerror = one;
+g.onsuccess = function () {
+try {
+if (g.result && g.result.byteLength) {
+Module.FS.writeFile('/Resources/' + k, new Uint8Array(g.result));
+say('[persist] restored ' + k + ' (' + g.result.byteLength + ' bytes)');
+}
+} catch (e) { say('[persist] restore ' + k + ': ' + e); }
+one();
+};
+});
+};
+};
+} catch (e) { finish(); }
+}
+// ---- split loader: gd_web .part0..15 -> merged buffer, Cache Storage "gd_web" ----
+var GD_SPLIT_CACHE = 'gd_web';
+var GD_DATA_PARTS = 16;
+var GD_WASM_PARTS = 16;
+function getParts(file, start, end) {
+var parts = [];
+for (var i = start; i <= end; i++) parts.push(file + '.part' + i);
+return parts;
+}
+// Global limiter: only 1 part fetch in flight across wasm+data at the same time.
+// Both merges run concurrently but contend on this lock, so network stays at 1.
+var __gdSlots = 1;
+var __gdQueue = [];
+function __gdAcquire() {
+if (__gdSlots > 0) { __gdSlots--; return Promise.resolve(); }
+return new Promise(function (res) { __gdQueue.push(res); });
+}
+function __gdRelease() {
+if (__gdQueue.length) { var next = __gdQueue.shift(); next(); }
+else __gdSlots++;
+}
+function __gdCacheReq(key) {
+try { return new URL(key, document.baseURI).href; }
+catch (e) { return key; }
+}
+var __gdMemCache = {};
+async function __gdFetchPart(url) {
+await __gdAcquire();
+try {
+var r = await window.__gdOrigFetch(url);
+if (!r.ok) throw new Error('Failed to fetch ' + url + ' HTTP ' + r.status);
+return await r.arrayBuffer();
+} finally { __gdRelease(); }
+}
+function __gdReport(which, key, loaded, total) {
+try {
+if (typeof Module !== 'undefined' && Module) {
+Module.dataFileDownloads = Module.dataFileDownloads || {};
+Module.dataFileDownloads[key] = { loaded: loaded, total: total };
+}
+} catch (e) {}
+try { if (which) setAssetBar(which, loaded, total); }
+catch (e) {}
+}
+async function mergeFiles(fileParts, cacheKey, which) {
+if (!which) which = /wasm/i.test(cacheKey) ? 'wasm' : (/\.data/i.test(cacheKey) ? 'data' : null);
+var req = __gdCacheReq(cacheKey);
+try {
+if (window.caches) {
+var cache = await caches.open(GD_SPLIT_CACHE);
+var hit = await cache.match(req);
+if (hit) {
+var hab = await hit.arrayBuffer();
+if (hab && hab.byteLength) {
+say('[split] cache hit ' + cacheKey + ' (' + hab.byteLength + ' bytes)');
+__gdReport(which, cacheKey, hab.byteLength, hab.byteLength);
+return hab;
+}
+}
+} else if (__gdMemCache[req] && __gdMemCache[req].byteLength) {
+var mab = __gdMemCache[req].slice(0);
+__gdReport(which, cacheKey, mab.byteLength, mab.byteLength);
+return mab;
+}
+} catch (e) { say('[split] cache lookup failed ' + cacheKey + ': ' + e); }
+say('[split] merging ' + fileParts.length + ' parts -> ' + cacheKey);
+var buffers = [];
+var loaded = 0;
+for (var i = 0; i < fileParts.length; i++) {
+var ab = await __gdFetchPart(fileParts[i]);
+buffers.push(ab);
+loaded += ab.byteLength;
+__gdReport(which, cacheKey, loaded, 0);
+if ((i & 3) === 3 || i === fileParts.length - 1)
+say('[split] ' + cacheKey + ' part ' + (i + 1) + '/' + fileParts.length +
+' (' + loaded + ' bytes)');
+}
+var total = buffers.reduce(function (a, b) { return a + b.byteLength; }, 0);
+var merged = new Uint8Array(total);
+var off = 0;
+for (var j = 0; j < buffers.length; j++) {
+merged.set(new Uint8Array(buffers[j]), off);
+off += buffers[j].byteLength;
+}
+buffers = null;
+try {
+if (window.caches) {
+var wcache = await caches.open(GD_SPLIT_CACHE);
+await wcache.put(req, new Response(merged.slice().buffer, {
+headers: {
+'Content-Type': 'application/octet-stream',
+'Content-Length': String(merged.byteLength)
+}
+}));
+say('[split] cached ' + cacheKey + ' (' + merged.byteLength + ' bytes)');
+} else { __gdMemCache[req] = merged.slice().buffer; }
+} catch (e) { say('[split] cache put failed ' + cacheKey + ': ' + e); }
+var out = merged.buffer;
+__gdReport(which, cacheKey, out.byteLength, out.byteLength);
+return out;
+}
+// Hook emscripten runtime: serve gd_web.data / gd_web.wasm from merged parts.
+// Covers both gd_web.js fetchRemotePackage('gd_web.data') and
+// index.html instantiateWasm fetch('gd_web.wasm'), no gd_web.js edit needed.
+(function () {
+if (!window.fetch) return;
+var origFetch = window.fetch.bind(window);
+window.__gdOrigFetch = origFetch;
+var inflight = {};
+function keyFor(urlStr) {
+if (!urlStr || urlStr.indexOf('.part') !== -1) return null;
+try {
+var p = new URL(urlStr, document.baseURI).pathname;
+if (p.slice(-12) === '/gd_web.data' || p === 'gd_web.data' ||
+urlStr === 'gd_web.data') return 'gd_web.data';
+if (p.slice(-12) === '/gd_web.wasm' || p === 'gd_web.wasm' ||
+urlStr === 'gd_web.wasm') return 'gd_web.wasm';
+} catch (e) {
+if (urlStr === 'gd_web.data' || urlStr === 'gd_web.wasm') return urlStr;
+}
+return null;
+}
+window.fetch = function (input, init) {
+var urlStr = (typeof input === 'string') ? input : (input && input.url);
+var key = urlStr ? keyFor(urlStr) : null;
+if (!key) return origFetch(input, init);
+if (!inflight[key]) {
+var parts = key === 'gd_web.data'
+? getParts('gd_web.data', 0, GD_DATA_PARTS - 1)
+: getParts('gd_web.wasm', 0, GD_WASM_PARTS - 1);
+inflight[key] = mergeFiles(parts, key).then(function (ab) {
+return new Response(ab, {
+status: 200,
+headers: {
+'Content-Type': key.slice(-5) === '.wasm'
+? 'application/wasm' : 'application/octet-stream',
+'Content-Length': String(ab.byteLength)
+}
+});
+}).catch(function (e) {
+inflight[key] = null;
+say('[split] merge failed for ' + key + ': ' + e);
+throw e;
+});
+}
+return inflight[key].then(function (resp) { return resp.clone(); });
+};
+})();
+var Module = {
+canvas: document.getElementById('canvas'),
+gdInputQueue: [],
+gdCursorPos: [0, 0],
+locateFile: function (p) { return p; },
+instantiateWasm: function (imports, success) {
+var url = 'gd_web.wasm';
+function report(loaded, total) {
+Module.dataFileDownloads = Module.dataFileDownloads || {};
+Module.dataFileDownloads['gd_web.wasm'] = { loaded: loaded, total: total };
+}
+function markDone() {
+gdAssetDone.wasm = true;
+setAssetBar('wasm', 1, 1);
+assetsDone();
+}
+function instantiate(ab) {
+return WebAssembly.instantiate(ab, imports).then(function (r) {
+success(r.instance, r.module);
+});
+}
+fetch(url).then(function (resp) {
+if (!resp.ok) throw new Error('wasm HTTP ' + resp.status);
+var total = Number(resp.headers.get('content-length') || 0);
+var loaded = 0;
+if (typeof TransformStream === 'undefined' || !resp.body ||
+!resp.body.getReader) {
+return resp.arrayBuffer().then(function (ab) {
+report(ab.byteLength, ab.byteLength);
+markDone();
+return instantiate(ab);
+});
+}
+var ts = new TransformStream({
+transform: function (chunk, ctrl) {
+loaded += chunk.length;
+report(loaded, total);
+ctrl.enqueue(chunk);
+},
+flush: function () {
+try { localStorage.setItem('gdWasmSize', String(loaded)); } catch (e) {}
+report(loaded, total);
+markDone();
+}
+});
+var streamed = new Response(resp.body.pipeThrough(ts), {
+status: 200,
+headers: { 'Content-Type': 'application/wasm' }
+});
+return WebAssembly.instantiateStreaming(streamed, imports)
+.then(function (r) { success(r.instance, r.module); });
+}).catch(function (e) {
+say('[wasm] streaming failed: ' + e);
+return fetch(url).then(function (r2) { return r2.arrayBuffer(); })
+.then(function (ab) {
+report(ab.byteLength, ab.byteLength);
+markDone();
+return instantiate(ab);
+})
+.catch(function (e2) { say('[wasm] failed: ' + e2); });
+});
+return {};
+},
+print: function (s) { say(s); },
+printErr: function (s) { say(s); },
+setStatus: function (t) {
+if (!t) return;
+var m = /\((\d+)\/(\d+)\)/.exec(t);
+if (m) {
+var total = +m[2] || 1;
+setProgress(+m[1] / total * 78);
+} else if (t.indexOf('Downloading') === 0) {
+setProgress(4);
+} else if (t.indexOf('Running') === 0) {
+forceAssetsDone();
+setProgress(80);
+} else if (t.indexOf('Compiling') === 0) {
+setProgress(76);
+}
+},
+onRuntimeInitialized: function () {
+window.__gdRuntimeReady = true;
+if (!/[?&]auto/.test(location.search) && Module._gd_autosave_set)
+Module._gd_autosave_set(0);
+if (/[?&]noauto/.test(location.search) && Module._gd_autosave_set)
+Module._gd_autosave_set(0);
+setProgress(82);
+try {
+Module.FS.chdir('/Resources');
+} catch (e) {
+say('FS.chdir failed: ' + e);
+}
+setTimeout(function () {
+restoreSaves(function () {
+setProgress(88);
+try {
+const r = Module._gd_boot();
+setProgress(92);
+if (r && typeof r.then === 'function') {
+r.then(function () { say('gd_boot resolved'); setProgress(100); })
+.catch(function (e) {
+say('gd_boot rejected: ' + e);
+if (e && e.stack) say('STACK: ' + e.stack);
+dumpTrace();
+});
+} else {
+say('gd_boot returned (sync)');
+setProgress(100);
+}
+} catch (e) {
+say('gd_boot exception: ' + e);
+}
+});
+}, 100);
+}
+};
+var started = false;
+function gdStart() {
+if (started) return;
+started = true;
+window.__gdLoadStarted = true;
+resetProgress();
+var startEl = document.getElementById('start');
+var flyEl = document.getElementById('logoFly');
+var s = 0.32;
+try {
+var dh = document.querySelector('#logoDock img').getBoundingClientRect().height;
+var fh = flyEl.querySelector('img').getBoundingClientRect().height;
+if (dh > 0 && fh > 0 && dh / fh < 1) s = dh / fh;
+} catch (e) {}
+flyEl.style.transform = 'translateY(-13vh) scale(' + s + ')';
+document.getElementById('loadFly').classList.add('down');
+setTimeout(function () { startEl.classList.add('hide'); }, 420);
+setTimeout(function () { document.getElementById('logoDock').classList.add('in'); }, 420);
+setTimeout(function () { document.getElementById('stage').classList.add('in'); }, 430);
+setTimeout(function () { document.getElementById('midbar').classList.add('in'); }, 480);
+setTimeout(function () { document.getElementById('console').classList.add('in'); }, 540);
+setTimeout(function () {
+startEl.style.display = 'none';
+window.__gdInputReady = true;
+if (window.__gdAckFocus) window.__gdAckFocus();
+}, 1700);
+function loadModule() {
+var s = document.createElement('script');
+s.src = 'gd_web.js';
+s.onerror = function () { say('failed to load gd_web.js'); forceAssetsDone(); };
+document.body.appendChild(s);
+}
+loadModule();
+}
+document.getElementById('loadFly').addEventListener('click', gdStart);
+document.addEventListener('keydown', function (e) {
+if (!started && (e.code === 'Space' || e.code === 'Enter' ||
+e.code === 'NumpadEnter')) {
+e.preventDefault();
+gdStart();
+}
+});</script><script>(function () {
+const el = document.getElementById('canvas');
+const WM_MOUSEMOVE = 0x200, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202,
+WM_RBUTTONDOWN = 0x204, WM_RBUTTONUP = 0x205,
+WM_MBUTTONDOWN = 0x207, WM_MBUTTONUP = 0x208;
+function ready() { return window.__gdInputReady === true; }
+function overCanvas(e) {
+var r;
+if (!ready() || !el) return false;
+if (e.target && e.target.closest &&
+e.target.closest('#console, #start, #loadFly, a, button, input, ' +
+'textarea, select')) {
+return false;
+}
+r = el.getBoundingClientRect();
+return e.clientX >= r.left && e.clientX < r.right &&
+e.clientY >= r.top && e.clientY < r.bottom;
+}
+function pos(e) {
+const r = el.getBoundingClientRect();
+const x = Math.max(0, Math.min(1919,
+Math.round((e.clientX - r.left) * 1920 / r.width)));
+const y = Math.max(0, Math.min(1079,
+Math.round((e.clientY - r.top) * 1080 / r.height)));
+Module.gdCursorPos[0] = x;
+Module.gdCursorPos[1] = y;
+return (x & 0xffff) | ((y & 0xffff) << 16);
+}
+function push(m, w, l) { Module.gdInputQueue.push([m | 0, w | 0, l | 0]); }
+var ackedFocus = false;
+function ackFocus() {
+if (ackedFocus) return;
+ackedFocus = true;
+push(0x0006, 1, 0);
+push(0x0007, 0, 0);
+push(0x001c, 1, 0);
+}
+window.__gdAckFocus = ackFocus;
+window.addEventListener('mousedown', function (e) {
+if (!overCanvas(e)) return;
+console.log('[page] mousedown btn=' + e.button + ' lp=0x' + pos(e).toString(16));
+var m = e.button === 2 ? WM_RBUTTONDOWN : (e.button === 1 ? WM_MBUTTONDOWN : WM_LBUTTONDOWN);
+var w = e.button === 2 ? 2 : (e.button === 1 ? 16 : 1);
+push(m, w, pos(e));
+e.preventDefault();
+});
+window.addEventListener('mouseup', function (e) {
+if (!ready()) return;
+console.log('[page] mouseup btn=' + e.button + ' lp=0x' + pos(e).toString(16));
+var m = e.button === 2 ? WM_RBUTTONUP : (e.button === 1 ? WM_MBUTTONUP : WM_LBUTTONUP);
+push(m, 0, pos(e));
+if (e.target === el) e.preventDefault();
+});
+window.addEventListener('mousemove', function (e) {
+if (!ready()) return;
+var q = Module.gdInputQueue;
+var w = (e.buttons & 1) ? 1 : 0, l = pos(e);
+if (q.length && q[q.length - 1][0] === WM_MOUSEMOVE) {
+q[q.length - 1] = [WM_MOUSEMOVE, w, l];
+} else {
+q.push([WM_MOUSEMOVE, w, l]);
+}
+});
+window.addEventListener('wheel', function (e) {
+if (!overCanvas(e)) return;
+var lp = pos(e);
+var dv = -e.deltaY, dh = e.deltaX;
+if (Math.abs(dv) >= Math.abs(dh)) {
+var notch = dv > 0 ? 120 : -120;
+push(0x020A, (notch & 0xFFFF) << 16, lp);
+} else {
+var hnotch = dh > 0 ? -120 : 120;
+push(0x020E, (hnotch & 0xFFFF) << 16, lp);
+}
+e.preventDefault();
+}, { passive: false });
+el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+el.tabIndex = 0;
+el.addEventListener('mousedown', function () { el.focus(); });
+var rawKeyN = 0;
+document.addEventListener('keydown', function (e) {
+if (rawKeyN++ < 10)
+console.log('[page] raw keydown code=' + e.code + ' key=' + e.key);
+}, true);
+var VK = { 'Escape':0x1B,'Space':0x20,'Enter':0x0D,'Backspace':0x08,'Tab':0x09,
+'ArrowLeft':0x25,'ArrowUp':0x26,'ArrowRight':0x27,'ArrowDown':0x28,
+'KeyW':0x57,'KeyA':0x41,'KeyS':0x53,'KeyD':0x44,
+'KeyQ':0x51,'KeyE':0x45,'KeyR':0x52,'KeyF':0x46,'KeyP':0x50 };
+var SCAN = { 'Escape':0x01,'Space':0x39,'Enter':0x1C,'Backspace':0x0E,'Tab':0x0F,
+'ArrowLeft':0x4B,'ArrowUp':0x48,'ArrowRight':0x4D,'ArrowDown':0x50,
+'KeyW':0x11,'KeyA':0x1E,'KeyS':0x1F,'KeyD':0x20,
+'KeyQ':0x10,'KeyE':0x12,'KeyR':0x13,'KeyF':0x21,'KeyP':0x19 };
+var EXT = { 'ArrowLeft':1,'ArrowUp':1,'ArrowRight':1,'ArrowDown':1 };
+Module.gdKeyState = new Uint8Array(256);
+function keyEvent(e, down) {
+if (!ready()) return;
+try {
+if (window.getSelection && String(window.getSelection()) !== '') return;
+} catch (err) {}
+var vk = VK[e.code] || e.keyCode || 0;
+if (down) {
+var ch = 0;
+if (e.key && e.key.length === 1) ch = e.key.charCodeAt(0);
+else if (e.code === 'Backspace') ch = 0x08;
+else if (e.code === 'Enter') ch = 0x0D;
+if (ch) {
+var clp = 1 | ((SCAN[e.code] || 0) << 16);
+if (EXT[e.code]) clp |= 0x1000000;
+if (keyEvent.cn === undefined) keyEvent.cn = 0;
+if (keyEvent.cn++ < 12)
+console.log('[page] char=0x' + ch.toString(16) + ' code=' + e.code);
+push(0x0102, ch, clp);
+}
+}
+if (!vk) return;
+if (keyEvent.n === undefined) keyEvent.n = 0;
+if (keyEvent.n++ < 8)
+console.log('[page] key ' + (down ? 'down' : 'up') + ' code=' + e.code +
+' vk=0x' + vk.toString(16));
+Module.gdKeyState[vk & 0xff] = down ? 1 : 0;
+var scan = SCAN[e.code] || 0;
+var lp = 1 | (scan << 16);
+if (EXT[e.code]) lp |= 0x1000000;
+if (!down) lp |= -1073741824;
+push(down ? 0x100 : 0x101, vk, lp);
+if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown')
+e.preventDefault();
+}
+window.addEventListener('keydown', function (e) { keyEvent(e, true); });
+window.addEventListener('keyup', function (e) { keyEvent(e, false); });
+})();</script><script>(function(){var b=document.getElementById('fsBtn'),d=document,c=document.getElementById('canvas');function F(){return d.fullscreenElement||d.webkitFullscreenElement||d.mozFullScreenElement||d.msFullscreenElement;}function U(){b.textContent=F()?'Exit Fullscreen':'Fullscreen';}function T(){try{if(F()){(d.exitFullscreen||d.webkitExitFullscreen||d.mozCancelFullScreen||d.msExitFullscreen).call(d);}else{(c.requestFullscreen||c.webkitRequestFullscreen||c.mozRequestFullScreen||c.msRequestFullscreen).call(c);}}catch(err){}}b.addEventListener('click',function(v){v.preventDefault();v.stopPropagation();T();b.blur();});['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'].forEach(function(n){d.addEventListener(n,U);});U();})();</script></body></html>
